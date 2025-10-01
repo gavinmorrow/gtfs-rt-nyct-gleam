@@ -411,7 +411,7 @@ fn nyct_trip_descriptor_bin_decoder() -> decode.Decoder(NyctTripDescriptor) {
     option.None,
     protobin.decode_string() |> decode.map(option.Some),
   )
-  use is_assigned <- decode.field(2, protobin.decode_bool())
+  use is_assigned <- decode.optional_field(2, False, protobin.decode_bool())
 
   NyctTripDescriptor(train_id:, is_assigned:) |> decode.success
 }

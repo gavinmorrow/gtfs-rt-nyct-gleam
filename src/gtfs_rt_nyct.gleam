@@ -82,21 +82,20 @@ pub type NyctHeader {
   )
 }
 
-fn nyct_header_decoder() -> decode.Decoder(NyctHeader) {
+fn nyct_header_bin_decoder() -> decode.Decoder(NyctHeader) {
+  use <-
+    protobin.decode_protobuf(
+      using: _,
+      named: "NyctHeader",
+      default: nyct_header_default,
+    )
+
   use version <- decode.field(1, decode.string)
   use trip_replacement_periods <- decode.field(
     2,
     decode.list(of: trip_replacement_period_bin_decoder()),
   )
   decode.success(NyctHeader(version:, trip_replacement_periods:))
-}
-
-fn nyct_header_bin_decoder() -> decode.Decoder(NyctHeader) {
-  protobin.decode_protobuf(
-    using: nyct_header_decoder,
-    named: "NyctHeader",
-    default: nyct_header_default,
-  )
 }
 
 const nyct_header_default = NyctHeader(
@@ -498,16 +497,17 @@ pub type StopTimeEvent {
 
 const stop_time_event_default = StopTimeEvent(time: unix_time_default)
 
-fn stop_time_event_bin_decoder() -> decode.Decoder(StopTimeEvent) {
-  use <-
-    protobin.decode_protobuf(
-      using: _,
-      named: "StopTimeEvent",
-      default: stop_time_event_default,
-    )
-
+fn stop_time_event_decoder() -> decode.Decoder(StopTimeEvent) {
   use time <- decode.field(2, unix_time_decoder())
   StopTimeEvent(time:) |> decode.success
+}
+
+fn stop_time_event_bin_decoder() -> decode.Decoder(StopTimeEvent) {
+  protobin.decode_protobuf(
+    using: stop_time_event_decoder,
+    named: "StopTimeEvent",
+    default: stop_time_event_default,
+  )
 }
 
 pub type VehicleStopStatus {

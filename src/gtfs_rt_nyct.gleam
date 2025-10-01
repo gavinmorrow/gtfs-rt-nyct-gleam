@@ -1,4 +1,9 @@
+import gleam/dynamic/decode
+import gleam/int
 import gleam/option
+import gleam/result
+import gleam/string
+import protobin
 
 /// The contents of a feed message.
 /// A feed is a continuous stream of feed messages. Each message in the stream is
@@ -18,6 +23,12 @@ pub type FeedMessage {
   )
 }
 
+pub fn feed_message_decoder() -> decode.Decoder(FeedMessage) {
+  use header <- decode.field(1, feed_header_bin_decoder())
+  use entity <- decode.field(2, decode.list(of: feed_entity_bin_decoder()))
+  decode.success(FeedMessage(header:, entity:))
+}
+
 /// Metadata about a feed, included in feed messages.
 pub type FeedHeader {
   FeedHeader(
@@ -29,6 +40,27 @@ pub type FeedHeader {
     timestamp: UnixTime,
     /// NYCT Subway extensions for the feed header
     nyct: NyctHeader,
+  )
+}
+
+const feed_header_default = FeedHeader(
+  gtfs_realtime_version: "1.0",
+  timestamp: unix_time_default,
+  nyct: nyct_header_default,
+)
+
+fn feed_header_decoder() -> decode.Decoder(FeedHeader) {
+  use gtfs_realtime_version <- decode.field(1, protobin.decode_string())
+  use timestamp <- decode.field(3, unix_time_decoder())
+  use nyct <- decode.field(1001, nyct_header_bin_decoder())
+  decode.success(FeedHeader(gtfs_realtime_version:, timestamp:, nyct:))
+}
+
+fn feed_header_bin_decoder() -> decode.Decoder(FeedHeader) {
+  protobin.decode_protobuf(
+    using: feed_header_decoder,
+    named: "FeedHeader",
+    default: feed_header_default,
   )
 }
 
@@ -50,6 +82,28 @@ pub type NyctHeader {
   )
 }
 
+fn nyct_header_decoder() -> decode.Decoder(NyctHeader) {
+  use version <- decode.field(1, decode.string)
+  use trip_replacement_periods <- decode.field(
+    2,
+    decode.list(of: trip_replacement_period_bin_decoder()),
+  )
+  decode.success(NyctHeader(version:, trip_replacement_periods:))
+}
+
+fn nyct_header_bin_decoder() -> decode.Decoder(NyctHeader) {
+  protobin.decode_protobuf(
+    using: nyct_header_decoder,
+    named: "NyctHeader",
+    default: nyct_header_default,
+  )
+}
+
+const nyct_header_default = NyctHeader(
+  version: "1.0",
+  trip_replacement_periods: [],
+)
+
 pub type TripReplacementPeriod {
   TripReplacementPeriod(
     /// The replacement period is for this route
@@ -57,6 +111,36 @@ pub type TripReplacementPeriod {
     /// The start time is omitted, the end time is currently now + 30 minutes for
     /// all routes of the A division
     replacement_period: UnixTime,
+  )
+}
+
+const trip_replacement_period_default = TripReplacementPeriod(
+  route_id: "",
+  replacement_period: unix_time_default,
+)
+
+fn trip_replacement_period_decoder() -> decode.Decoder(TripReplacementPeriod) {
+  use route_id <- decode.field(1, protobin.decode_string())
+  use replacement_period <- decode.field(2, {
+    use <-
+      protobin.decode_protobuf(
+        using: _,
+        named: "ReplacementPeriod",
+        default: unix_time_default,
+      )
+    use time <- decode.field(2, unix_time_decoder())
+    time |> decode.success
+  })
+  decode.success(TripReplacementPeriod(route_id:, replacement_period:))
+}
+
+fn trip_replacement_period_bin_decoder() -> decode.Decoder(
+  TripReplacementPeriod,
+) {
+  protobin.decode_protobuf(
+    using: trip_replacement_period_decoder,
+    named: "TripReplacementPeriod",
+    default: trip_replacement_period_default,
   )
 }
 
@@ -73,6 +157,22 @@ pub type FeedEntity {
     /// more info).
     id: String,
     data: FeedEntityData,
+  )
+}
+
+const feed_entity_default = FeedEntity(id: "", data: feed_entity_data_default)
+
+fn feed_entity_decoder() -> decode.Decoder(FeedEntity) {
+  use id <- decode.field(1, protobin.decode_string())
+  use data <- decode.then(feed_entity_data_decoder())
+  decode.success(FeedEntity(id:, data:))
+}
+
+fn feed_entity_bin_decoder() {
+  protobin.decode_protobuf(
+    using: feed_entity_decoder,
+    named: "FeedEntity",
+    default: feed_entity_default,
   )
 }
 
@@ -128,7 +228,7 @@ pub type FeedEntityData {
     /// - stop_sequences 3,4,5,6,7 have delay of 5 min.
     /// - stop_sequences 8,9 have delay of 1 min.
     /// - stop_sequences 10,... have unknown delay.
-    stop_time_update: List(StopTimeUpdate),
+    stop_time_updates: List(StopTimeUpdate),
   )
 
   /// Realtime positioning information for a given vehicle.
@@ -143,11 +243,78 @@ pub type FeedEntityData {
     /// If current_status is missing IN_TRANSIT_TO is assumed.
     current_stop_sequence: Int,
     current_status: VehicleStopStatus,
-    timestampe: UnixTime,
+    timestamp: UnixTime,
     /// Identifies the current stop. The value must be the same as in stops.txt in
     /// the corresponding GTFS feed.
     stop_id: String,
   )
+}
+
+const feed_entity_data_default = TripUpdate(
+  trip: trip_descriptor_default,
+  stop_time_updates: [],
+)
+
+const trip_update_default = TripUpdate(
+  trip: trip_descriptor_default,
+  stop_time_updates: [],
+)
+
+const vehicle_position_default = VehiclePosition(
+  trip: trip_descriptor_default,
+  current_stop_sequence: 0,
+  current_status: vehicle_stop_status_default,
+  timestamp: unix_time_default,
+  stop_id: "",
+)
+
+pub fn feed_entity_data_decoder() -> decode.Decoder(FeedEntityData) {
+  let trip_update_decoder =
+    decode.field(3, trip_update_bin_decoder(), decode.success)
+
+  let vehicle_position_decoder =
+    decode.field(4, vehicle_position_bin_decoder(), decode.success)
+
+  decode.one_of(trip_update_decoder, or: [vehicle_position_decoder])
+}
+
+fn trip_update_bin_decoder() -> decode.Decoder(FeedEntityData) {
+  use <-
+    protobin.decode_protobuf(
+      using: _,
+      named: "TripUpdate",
+      default: trip_update_default,
+    )
+  use trip <- decode.field(1, trip_descriptor_bin_decoder())
+  use stop_time_updates <- decode.field(
+    2,
+    decode.list(of: stop_time_update_bin_decoder()),
+  )
+  TripUpdate(trip:, stop_time_updates:) |> decode.success
+}
+
+fn vehicle_position_bin_decoder() -> decode.Decoder(FeedEntityData) {
+  use <-
+    protobin.decode_protobuf(
+      using: _,
+      named: "VehiclePosition",
+      default: vehicle_position_default,
+    )
+
+  use trip <- decode.field(1, trip_descriptor_bin_decoder())
+  use current_stop_sequence <- decode.field(3, protobin.decode_uint())
+  use current_status <- decode.field(4, vehicle_stop_status_decoder())
+  use timestamp <- decode.field(5, unix_time_decoder())
+  use stop_id <- decode.field(7, protobin.decode_string())
+
+  VehiclePosition(
+    trip:,
+    current_stop_sequence:,
+    current_status:,
+    timestamp:,
+    stop_id:,
+  )
+  |> decode.success
 }
 
 pub type TripDescriptor {
@@ -159,8 +326,54 @@ pub type TripDescriptor {
   )
 }
 
+const trip_descriptor_default = TripDescriptor(
+  trip_id: "",
+  start_date: date_default,
+  route_id: "",
+  nyct: nyct_trip_descriptor_default,
+)
+
+fn trip_descriptor_decoder() -> decode.Decoder(TripDescriptor) {
+  use trip_id <- decode.field(1, protobin.decode_string())
+  use start_date <- decode.field(3, date_decoder())
+  use route_id <- decode.field(5, protobin.decode_string())
+  use nyct <- decode.field("nyct", nyct_trip_descriptor_bin_decoder())
+  decode.success(TripDescriptor(trip_id:, start_date:, route_id:, nyct:))
+}
+
+fn trip_descriptor_bin_decoder() -> decode.Decoder(TripDescriptor) {
+  protobin.decode_protobuf(
+    using: trip_descriptor_decoder,
+    named: "TripDescriptor",
+    default: trip_descriptor_default,
+  )
+}
+
 pub type NyctTripDescriptor {
   NyctTripDescriptor(train_id: option.Option(String), is_assigned: Bool)
+}
+
+const nyct_trip_descriptor_default = NyctTripDescriptor(
+  train_id: option.None,
+  is_assigned: False,
+)
+
+fn nyct_trip_descriptor_bin_decoder() -> decode.Decoder(NyctTripDescriptor) {
+  use <-
+    protobin.decode_protobuf(
+      using: _,
+      named: "NyctTripDescriptor",
+      default: nyct_trip_descriptor_default,
+    )
+
+  use train_id <- decode.optional_field(
+    1,
+    option.None,
+    protobin.decode_string() |> decode.map(option.Some),
+  )
+  use is_assigned <- decode.field(2, protobin.decode_bool())
+
+  NyctTripDescriptor(train_id:, is_assigned:) |> decode.success
 }
 
 /// Realtime update for arrival and/or departure events for a given stop on a
@@ -173,6 +386,29 @@ pub type StopTimeUpdate {
     /// Must be the same as in stops.txt in the corresponding GTFS feed.
     stop_id: StopId,
     nyct: NyctStopTimeUpdate,
+  )
+}
+
+const stop_time_update_default = StopTimeUpdate(
+  arrival: stop_time_event_default,
+  departure: stop_time_event_default,
+  stop_id: stop_id_default,
+  nyct: nyct_stop_time_update_default,
+)
+
+fn stop_time_update_decoder() -> decode.Decoder(StopTimeUpdate) {
+  use arrival <- decode.field(2, stop_time_event_bin_decoder())
+  use departure <- decode.field(3, stop_time_event_bin_decoder())
+  use stop_id <- decode.field(4, protobin.decode_string())
+  use nyct <- decode.field(1001, nyct_stop_time_bin_decoder())
+  decode.success(StopTimeUpdate(arrival:, departure:, stop_id:, nyct:))
+}
+
+fn stop_time_update_bin_decoder() {
+  protobin.decode_protobuf(
+    using: stop_time_update_decoder,
+    named: "StopTimeUpdate",
+    default: stop_time_update_default,
   )
 }
 
@@ -212,6 +448,32 @@ pub type NyctStopTimeUpdate {
   )
 }
 
+const nyct_stop_time_update_default = NyctStopTimeUpdate(
+  scheduled_track: option.None,
+  actual_track: option.None,
+)
+
+fn nyct_stop_time_bin_decoder() -> decode.Decoder(NyctStopTimeUpdate) {
+  use <-
+    protobin.decode_protobuf(
+      using: _,
+      named: "NyctStopTimeUpdate",
+      default: nyct_stop_time_update_default,
+    )
+
+  use scheduled_track <- decode.optional_field(
+    1,
+    option.None,
+    protobin.decode_string() |> decode.map(option.Some),
+  )
+  use actual_track <- decode.optional_field(
+    2,
+    option.None,
+    protobin.decode_string() |> decode.map(option.Some),
+  )
+  NyctStopTimeUpdate(scheduled_track:, actual_track:) |> decode.success
+}
+
 /// Timing information for a single predicted event (either arrival or
 /// departure).
 /// Timing consists of delay and/or estimated time, and uncertainty.
@@ -234,6 +496,20 @@ pub type StopTimeEvent {
   )
 }
 
+const stop_time_event_default = StopTimeEvent(time: unix_time_default)
+
+fn stop_time_event_bin_decoder() -> decode.Decoder(StopTimeEvent) {
+  use <-
+    protobin.decode_protobuf(
+      using: _,
+      named: "StopTimeEvent",
+      default: stop_time_event_default,
+    )
+
+  use time <- decode.field(2, unix_time_decoder())
+  StopTimeEvent(time:) |> decode.success
+}
+
 pub type VehicleStopStatus {
   /// The vehicle is just about to arrive at the stop (on a stop
   /// display, the vehicle symbol typically flashes).
@@ -244,14 +520,59 @@ pub type VehicleStopStatus {
   InTransit
 }
 
+const vehicle_stop_status_default = InTransit
+
+fn vehicle_stop_status_decoder() -> decode.Decoder(VehicleStopStatus) {
+  use variant <- decode.then(protobin.decode_uint())
+  case variant {
+    0 -> Incoming |> decode.success
+    1 -> Stopped |> decode.success
+    2 -> InTransit |> decode.success
+    _ -> decode.failure(vehicle_stop_status_default, "VehicleStopStatus")
+  }
+}
+
 pub type StopId =
   String
+
+const stop_id_default = ""
 
 pub type Date {
   Date(year: Int, month: Int, day: Int)
 }
 
+const date_default = Date(year: 1970, month: 1, day: 1)
+
+fn date_decoder() -> decode.Decoder(Date) {
+  use date <- decode.then(protobin.decode_string())
+  let date = {
+    use year <- result.try(
+      date
+      |> string.slice(at_index: 0, length: 4)
+      |> int.parse,
+    )
+    use month <- result.try(
+      date |> string.slice(at_index: 4, length: 2) |> int.parse,
+    )
+    use day <- result.try(
+      date |> string.slice(at_index: 6, length: 2) |> int.parse,
+    )
+    Date(year:, month:, day:) |> Ok
+  }
+  case date {
+    Ok(date) -> decode.success(date)
+    Error(Nil) -> decode.failure(date_default, "Date")
+  }
+}
+
 /// POSIX/Unix time (ie number of seconds since January 1st 1970 00:00:00 UTC).
 pub type UnixTime {
   UnixTime(Int)
+}
+
+const unix_time_default = UnixTime(0)
+
+pub fn unix_time_decoder() -> decode.Decoder(UnixTime) {
+  use seconds <- decode.then(protobin.decode_uint())
+  UnixTime(seconds) |> decode.success
 }

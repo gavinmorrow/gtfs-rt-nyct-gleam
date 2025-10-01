@@ -353,7 +353,44 @@ fn trip_descriptor_bin_decoder() -> decode.Decoder(TripDescriptor) {
 }
 
 pub type NyctTripDescriptor {
-  NyctTripDescriptor(train_id: option.Option(String), is_assigned: Bool)
+  NyctTripDescriptor(
+    /// The nyct_train_id is meant for internal use only. It provides an
+    /// easy way to associated GTFS-realtime trip identifiers with NYCT rail
+    /// operations identifier 
+    /// 
+    /// The ATS office system assigns unique train identification (Train ID) to
+    /// each train operating within or ready to enter the mainline of the
+    /// monitored territory. An example of this is 06 0123+ PEL/BBR and is decoded
+    /// as follows: 
+    /// 
+    /// The first character represents the trip type designator. 0 identifies a
+    /// scheduled revenue trip. Other revenue trip values that are a result of a
+    /// change to the base schedule include; [= reroute], [/ skip stop], [$ turn
+    /// train] also known as shortly lined service.  
+    /// 
+    /// The second character 6 represents the trip line i.e. number 6 train The
+    /// third set of characters identify the decoded origin time. The last
+    /// character may be blank "on the whole minute" or + "30 seconds" 
+    /// 
+    /// Note: Origin times will not change when there is a trip type change.  This
+    /// is followed by a three character "Origin Location" / "Destination
+    /// Location"
+    train_id: option.Option(String),
+    /// This trip has been assigned to a physical train. If true, this trip is
+    /// already underway or most likely will depart shortly. 
+    ///
+    /// Train Assignment is a function of the Automatic Train Supervision (ATS)
+    /// office system used by NYCT Rail Operations to monitor and track train
+    /// movements. ATS provides the ability to "assign" the nyct_train_id
+    /// attribute when a physical train is at its origin terminal. These assigned
+    /// trips have the is_assigned field set in the TripDescriptor.
+    ///
+    /// When a train is at a terminal but has not been given a work program it is
+    /// declared unassigned and is tagged as such. Unassigned trains can be moved
+    /// to a storage location or assigned a nyct_train_id when a determination for
+    /// service is made.
+    is_assigned: Bool,
+  )
 }
 
 const nyct_trip_descriptor_default = NyctTripDescriptor(

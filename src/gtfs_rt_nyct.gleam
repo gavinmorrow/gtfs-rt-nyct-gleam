@@ -90,7 +90,7 @@ fn nyct_header_bin_decoder() -> decode.Decoder(NyctHeader) {
       default: nyct_header_default,
     )
 
-  use version <- decode.field(1, decode.string)
+  use version <- decode.field(1, protobin.decode_string())
   use trip_replacement_periods <- decode.field(
     2,
     decode.list(of: trip_replacement_period_bin_decoder()),
@@ -106,7 +106,7 @@ const nyct_header_default = NyctHeader(
 pub type TripReplacementPeriod {
   TripReplacementPeriod(
     /// The replacement period is for this route
-    route_id: String,
+    route_id: option.Option(String),
     /// The start time is omitted, the end time is currently now + 30 minutes for
     /// all routes of the A division
     replacement_period: UnixTime,
@@ -114,12 +114,16 @@ pub type TripReplacementPeriod {
 }
 
 const trip_replacement_period_default = TripReplacementPeriod(
-  route_id: "",
+  route_id: option.None,
   replacement_period: unix_time_default,
 )
 
 fn trip_replacement_period_decoder() -> decode.Decoder(TripReplacementPeriod) {
-  use route_id <- decode.field(1, protobin.decode_string())
+  use route_id <- decode.optional_field(
+    1,
+    option.None,
+    protobin.decode_string() |> decode.map(option.Some),
+  )
   use replacement_period <- decode.field(2, {
     use <-
       protobin.decode_protobuf(
@@ -267,7 +271,7 @@ const vehicle_position_default = VehiclePosition(
   stop_id: "",
 )
 
-pub fn feed_entity_data_decoder() -> decode.Decoder(FeedEntityData) {
+fn feed_entity_data_decoder() -> decode.Decoder(FeedEntityData) {
   let trip_update_decoder =
     decode.field(3, trip_update_bin_decoder(), decode.success)
 
@@ -336,7 +340,7 @@ fn trip_descriptor_decoder() -> decode.Decoder(TripDescriptor) {
   use trip_id <- decode.field(1, protobin.decode_string())
   use start_date <- decode.field(3, date_decoder())
   use route_id <- decode.field(5, protobin.decode_string())
-  use nyct <- decode.field("nyct", nyct_trip_descriptor_bin_decoder())
+  use nyct <- decode.field(1001, nyct_trip_descriptor_bin_decoder())
   decode.success(TripDescriptor(trip_id:, start_date:, route_id:, nyct:))
 }
 
@@ -381,7 +385,7 @@ fn nyct_trip_descriptor_bin_decoder() -> decode.Decoder(NyctTripDescriptor) {
 pub type StopTimeUpdate {
   StopTimeUpdate(
     arrival: StopTimeEvent,
-    departure: StopTimeEvent,
+    departure: option.Option(StopTimeEvent),
     /// Must be the same as in stops.txt in the corresponding GTFS feed.
     stop_id: StopId,
     nyct: NyctStopTimeUpdate,
@@ -390,14 +394,18 @@ pub type StopTimeUpdate {
 
 const stop_time_update_default = StopTimeUpdate(
   arrival: stop_time_event_default,
-  departure: stop_time_event_default,
+  departure: option.Some(stop_time_event_default),
   stop_id: stop_id_default,
   nyct: nyct_stop_time_update_default,
 )
 
 fn stop_time_update_decoder() -> decode.Decoder(StopTimeUpdate) {
   use arrival <- decode.field(2, stop_time_event_bin_decoder())
-  use departure <- decode.field(3, stop_time_event_bin_decoder())
+  use departure <- decode.optional_field(
+    3,
+    option.None,
+    stop_time_event_bin_decoder() |> decode.map(option.Some),
+  )
   use stop_id <- decode.field(4, protobin.decode_string())
   use nyct <- decode.field(1001, nyct_stop_time_bin_decoder())
   decode.success(StopTimeUpdate(arrival:, departure:, stop_id:, nyct:))
@@ -572,7 +580,7 @@ pub type UnixTime {
 
 const unix_time_default = UnixTime(0)
 
-pub fn unix_time_decoder() -> decode.Decoder(UnixTime) {
+fn unix_time_decoder() -> decode.Decoder(UnixTime) {
   use seconds <- decode.then(protobin.decode_uint())
   UnixTime(seconds) |> decode.success
 }

@@ -303,7 +303,11 @@ fn vehicle_position_bin_decoder() -> decode.Decoder(FeedEntityData) {
 
   use trip <- decode.field(1, trip_descriptor_bin_decoder())
   use current_stop_sequence <- decode.field(3, protobin.decode_uint())
-  use current_status <- decode.field(4, vehicle_stop_status_decoder())
+  use current_status <- decode.optional_field(
+    4,
+    InTransit,
+    vehicle_stop_status_decoder(),
+  )
   use timestamp <- decode.field(5, unix_time_decoder())
   use stop_id <- decode.field(7, protobin.decode_string())
 

@@ -251,6 +251,9 @@ pub type FeedEntityData {
     /// the corresponding GTFS feed.
     stop_id: String,
   )
+
+  /// An alert, indicating some sort of incident in the public transit network.
+  Alert(informed_entities: List(EntitySelector), header_text: String)
 }
 
 const feed_entity_data_default = trip_update_default
@@ -268,6 +271,8 @@ const vehicle_position_default = VehiclePosition(
   stop_id: "",
 )
 
+const alert_default = Alert(informed_entities: [], header_text: "")
+
 fn feed_entity_data_decoder() -> decode.Decoder(FeedEntityData) {
   let trip_update_decoder =
     decode.field(3, trip_update_bin_decoder(), decode.success)
@@ -275,7 +280,12 @@ fn feed_entity_data_decoder() -> decode.Decoder(FeedEntityData) {
   let vehicle_position_decoder =
     decode.field(4, vehicle_position_bin_decoder(), decode.success)
 
-  decode.one_of(trip_update_decoder, or: [vehicle_position_decoder])
+  let alert_decoder = decode.field(5, alert_bin_decoder(), decode.success)
+
+  decode.one_of(trip_update_decoder, or: [
+    vehicle_position_decoder,
+    alert_decoder,
+  ])
 }
 
 fn trip_update_bin_decoder() -> decode.Decoder(FeedEntityData) {
@@ -321,10 +331,33 @@ fn vehicle_position_bin_decoder() -> decode.Decoder(FeedEntityData) {
   |> decode.success
 }
 
+fn alert_bin_decoder() -> decode.Decoder(FeedEntityData) {
+  use <-
+    protobin.decode_protobuf(using: _, named: "Alerts", default: alert_default)
+
+  use informed_entities <- decode.field(
+    5,
+    decode.list(entity_selector_bin_decoder()),
+  )
+
+  let translation_decoder = {
+    use <- protobin.decode_protobuf(using: _, named: "Translation", default: "")
+    decode.field(1, protobin.decode_string(), decode.success)
+  }
+  let translated_string_decoder = {
+    use <-
+      protobin.decode_protobuf(using: _, named: "TranslatedString", default: "")
+    decode.field(1, translation_decoder, decode.success)
+  }
+  use header_text <- decode.field(10, translated_string_decoder)
+
+  Alert(informed_entities:, header_text:) |> decode.success
+}
+
 pub type TripDescriptor {
   TripDescriptor(
     trip_id: String,
-    start_date: Date,
+    start_date: option.Option(Date),
     route_id: String,
     nyct: NyctTripDescriptor,
   )
@@ -332,14 +365,18 @@ pub type TripDescriptor {
 
 const trip_descriptor_default = TripDescriptor(
   trip_id: "",
-  start_date: date_default,
+  start_date: option.Some(date_default),
   route_id: "",
   nyct: nyct_trip_descriptor_default,
 )
 
 fn trip_descriptor_decoder() -> decode.Decoder(TripDescriptor) {
   use trip_id <- decode.field(1, protobin.decode_string())
-  use start_date <- decode.field(3, date_decoder())
+  use start_date <- decode.optional_field(
+    3,
+    option.None,
+    date_decoder() |> decode.map(option.Some),
+  )
   use route_id <- decode.field(5, protobin.decode_string())
   use nyct <- decode.field(1001, nyct_trip_descriptor_bin_decoder())
   decode.success(TripDescriptor(trip_id:, start_date:, route_id:, nyct:))
@@ -580,6 +617,51 @@ fn vehicle_stop_status_decoder() -> decode.Decoder(VehicleStopStatus) {
     2 -> InTransit |> decode.success
     _ -> decode.failure(vehicle_stop_status_default, "VehicleStopStatus")
   }
+}
+
+/// A selector for an entity in a GTFS feed.
+pub type EntitySelector {
+  // Note: I've only seen the trip field being used, but since it's an alert
+  //       and happens in exceptional cases, I'm putting these in just in case.
+  EntitySelector(
+    route_id: option.Option(String),
+    trip: option.Option(TripDescriptor),
+    stop_id: option.Option(String),
+  )
+}
+
+const entity_selector_default = EntitySelector(
+  route_id: option.None,
+  trip: option.Some(trip_descriptor_default),
+  stop_id: option.None,
+)
+
+fn entity_selector_decoder() -> decode.Decoder(EntitySelector) {
+  use route_id <- decode.optional_field(
+    2,
+    option.None,
+    protobin.decode_string() |> decode.map(option.Some),
+  )
+  use trip <- decode.optional_field(
+    4,
+    option.None,
+    trip_descriptor_bin_decoder() |> decode.map(option.Some),
+  )
+  use stop_id <- decode.optional_field(
+    5,
+    option.None,
+    protobin.decode_string() |> decode.map(option.Some),
+  )
+
+  EntitySelector(route_id:, trip:, stop_id:) |> decode.success
+}
+
+fn entity_selector_bin_decoder() -> decode.Decoder(EntitySelector) {
+  protobin.decode_protobuf(
+    using: entity_selector_decoder,
+    named: "EntitySelector",
+    default: entity_selector_default,
+  )
 }
 
 pub type StopId =

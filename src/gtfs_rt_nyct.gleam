@@ -253,10 +253,7 @@ pub type FeedEntityData {
   )
 }
 
-const feed_entity_data_default = TripUpdate(
-  trip: trip_descriptor_default,
-  stop_time_updates: [],
-)
+const feed_entity_data_default = trip_update_default
 
 const trip_update_default = TripUpdate(
   trip: trip_descriptor_default,

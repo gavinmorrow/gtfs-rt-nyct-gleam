@@ -1,16 +1,15 @@
 name = "gtfs_rt_nyct"
 version = "0.1.0"
 
-# Fill out these fields if you intend to generate HTML documentation or publish
-# your project to the Hex package manager.
-#
-# description = ""
-# licences = ["Apache-2.0"]
-# repository = { type = "github", user = "", repo = "" }
-# links = [{ title = "Website", href = "" }]
-#
-# For a full reference of all the available options, you can have a look at
-# https://gleam.run/writing-gleam/gleam-toml/.
+links = [
+  { title = "GTFS-RT Specification", href = "https://gtfs.org/documentation/realtime/reference/" },
+  { title = "MTA NYCT Developer Resources", href = "https://www.mta.info/developers" },
+  { title = "GTFS-RT Protobuf Schema", href = "https://github.com/google/transit/blob/master/gtfs-realtime/proto/gtfs-realtime.proto" },
+  { title = "MTA NYCT GTFS-RT Extensions Protobuf Schema", href = "https://raw.githubusercontent.com/OneBusAway/onebusaway-gtfs-realtime-api/master/src/main/proto/com/google/transit/realtime/gtfs-realtime-NYCT.proto" },
+]
+description = "NYCT-specific GTFS-RT bindings and decoders for Gleam!"
+licences = ["Apache-2.0"]
+repository = { type = "github", user = "gavinmorrow", repo = "gtfs-rt-nyct-gleam" }
 
 [dependencies]
 gleam_stdlib = ">= 0.44.0 and < 2.0.0"

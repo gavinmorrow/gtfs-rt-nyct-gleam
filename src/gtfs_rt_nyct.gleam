@@ -243,8 +243,8 @@ pub type FeedEntityData {
     /// The stop sequence index of the current stop. The meaning of
     /// current_stop_sequence (i.e., the stop that it refers to) is determined by
     /// current_status.
+    current_stop_sequence: option.Option(Int),
     /// If current_status is missing IN_TRANSIT_TO is assumed.
-    current_stop_sequence: Int,
     current_status: VehicleStopStatus,
     timestamp: UnixTime,
     /// Identifies the current stop. The value must be the same as in stops.txt in
@@ -265,7 +265,7 @@ const trip_update_default = TripUpdate(
 
 const vehicle_position_default = VehiclePosition(
   trip: trip_descriptor_default,
-  current_stop_sequence: 0,
+  current_stop_sequence: option.None,
   current_status: vehicle_stop_status_default,
   timestamp: unix_time_default,
   stop_id: "",
@@ -296,8 +296,9 @@ fn trip_update_bin_decoder() -> decode.Decoder(FeedEntityData) {
       default: trip_update_default,
     )
   use trip <- decode.field(1, trip_descriptor_bin_decoder())
-  use stop_time_updates <- decode.field(
+  use stop_time_updates <- decode.optional_field(
     2,
+    [],
     decode.list(of: stop_time_update_bin_decoder()),
   )
   TripUpdate(trip:, stop_time_updates:) |> decode.success
@@ -312,7 +313,11 @@ fn vehicle_position_bin_decoder() -> decode.Decoder(FeedEntityData) {
     )
 
   use trip <- decode.field(1, trip_descriptor_bin_decoder())
-  use current_stop_sequence <- decode.field(3, protobin.decode_uint())
+  use current_stop_sequence <- decode.optional_field(
+    3,
+    option.None,
+    protobin.decode_uint() |> decode.map(option.Some),
+  )
   use current_status <- decode.optional_field(
     4,
     InTransit,

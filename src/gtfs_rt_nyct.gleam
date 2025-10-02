@@ -422,7 +422,7 @@ fn nyct_trip_descriptor_bin_decoder() -> decode.Decoder(NyctTripDescriptor) {
 /// The producer is allowed, although not required, to drop past events.
 pub type StopTimeUpdate {
   StopTimeUpdate(
-    arrival: StopTimeEvent,
+    arrival: option.Option(StopTimeEvent),
     departure: option.Option(StopTimeEvent),
     /// Must be the same as in stops.txt in the corresponding GTFS feed.
     stop_id: StopId,
@@ -431,14 +431,18 @@ pub type StopTimeUpdate {
 }
 
 const stop_time_update_default = StopTimeUpdate(
-  arrival: stop_time_event_default,
+  arrival: option.Some(stop_time_event_default),
   departure: option.Some(stop_time_event_default),
   stop_id: stop_id_default,
   nyct: nyct_stop_time_update_default,
 )
 
 fn stop_time_update_decoder() -> decode.Decoder(StopTimeUpdate) {
-  use arrival <- decode.field(2, stop_time_event_bin_decoder())
+  use arrival <- decode.optional_field(
+    2,
+    option.None,
+    stop_time_event_bin_decoder() |> decode.map(option.Some),
+  )
   use departure <- decode.optional_field(
     3,
     option.None,

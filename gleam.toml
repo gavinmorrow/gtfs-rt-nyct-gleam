@@ -1,5 +1,5 @@
 name = "gtfs_rt_nyct"
-version = "0.1.0"
+version = "0.1.1"
 
 links = [
   { title = "GTFS-RT Specification", href = "https://gtfs.org/documentation/realtime/reference/" },

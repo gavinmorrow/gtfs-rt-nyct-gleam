@@ -340,8 +340,9 @@ fn alert_bin_decoder() -> decode.Decoder(FeedEntityData) {
   use <-
     protobin.decode_protobuf(using: _, named: "Alerts", default: alert_default)
 
-  use informed_entities <- decode.field(
+  use informed_entities <- decode.optional_field(
     5,
+    [],
     decode.list(entity_selector_bin_decoder()),
   )
 

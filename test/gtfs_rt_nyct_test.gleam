@@ -78,6 +78,14 @@ pub fn gtfs_rt_1234567s_test() -> Nil {
   assert gtfs.entity |> list.length == 445
 }
 
+pub fn gtfs_rt_1234567s_2_test() -> Nil {
+  let assert Ok(protobin.Parsed(value: gtfs, ..)) =
+    parse_gtfs_rt(lines: "1234567s.2")
+
+  assert gtfs.header.gtfs_realtime_version == "1.0"
+  assert gtfs.entity |> list.length == 457
+}
+
 pub fn gtfs_rt_si_test() -> Nil {
   let assert Ok(protobin.Parsed(value: gtfs, ..)) = parse_gtfs_rt(lines: "si")
 
@@ -87,7 +95,16 @@ pub fn gtfs_rt_si_test() -> Nil {
 
 pub fn benchmark_test_() {
   use <- Timeout(60_000)
+  benchmark_inner(200.0)
+}
 
+// TODO: find way to run this just on JS
+//       (see <https://github.com/lpil/gleeunit/issues/52>)
+// pub fn benchmark_test() {
+//   benchmark_inner(todo)
+// }
+
+pub fn benchmark_inner(time_to_beat: Float) {
   let assert Ok(gtfs_ace) = file.read_bits(from: "./test/nyct_gtfs-ace.pb")
   let assert Ok(gtfs_bdfm) = file.read_bits(from: "./test/nyct_gtfs-bdfm.pb")
   let assert Ok(gtfs_g) = file.read_bits(from: "./test/nyct_gtfs-g.pb")
@@ -96,6 +113,8 @@ pub fn benchmark_test_() {
   let assert Ok(gtfs_l) = file.read_bits(from: "./test/nyct_gtfs-l.pb")
   let assert Ok(gtfs_1234567s) =
     file.read_bits(from: "./test/nyct_gtfs-1234567s.pb")
+  let assert Ok(gtfs_1234567s_2) =
+    file.read_bits(from: "./test/nyct_gtfs-1234567s.2.pb")
   let assert Ok(gtfs_si) = file.read_bits(from: "./test/nyct_gtfs-si.pb")
 
   let res =
@@ -108,6 +127,7 @@ pub fn benchmark_test_() {
         bench.Input("NQRW gtfs", gtfs_nqrw),
         bench.Input("L gtfs", gtfs_l),
         bench.Input("1234567S gtfs", gtfs_1234567s),
+        bench.Input("1234567S gtfs (2)", gtfs_1234567s_2),
         bench.Input("SI gtfs", gtfs_si),
       ],
       [
@@ -120,12 +140,6 @@ pub fn benchmark_test_() {
       [bench.Duration(5000)],
     )
 
-  let mean_ms =
-    list_mean(res.sets, fn(set) { list_mean(set.reps, fn(time) { time }) })
-  assert mean_ms <. 350.0
-
-  io.println("\nOverall mean: " <> float.to_string(mean_ms))
-
   io.println(
     "\n"
     <> bench.table(res, [
@@ -137,6 +151,12 @@ pub fn benchmark_test_() {
       bench.SDPercent,
     ]),
   )
+
+  let mean_ms =
+    list_mean(res.sets, fn(set) { list_mean(set.reps, fn(time) { time }) })
+  io.println("\nOverall mean: " <> float.to_string(mean_ms))
+  io.println("\nTime to beat: " <> float.to_string(time_to_beat))
+  assert mean_ms <. time_to_beat
 }
 
 fn list_mean(list: List(a), to_float: fn(a) -> Float) -> Float {
